@@ -3,11 +3,22 @@
 # LIBRARIES
 #################################
 
-import matplotlib.pyplot as plt
-import numpy as np
-import seaborn
+# personal files
+from gradient_methods import *
 
+# plotting
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import seaborn
 from mpl_toolkits.mplot3d import Axes3D
+
+# computation & data structures
+import numpy as np
+import theano
+import theano.tensor as T
+
+# misc
+from copy import deepcopy
 
 
 #################################
@@ -33,7 +44,7 @@ def generate_data(response_fn, n=1, n_obs=100):
     return data_matrix, response
 
 
-def plot_regression(x_data, response, beta, plot_type='2d', title=''):
+def plot_regression(x_data, response, beta_path, cost_fn, plot_type='2d', title=''):
     """
     Simple plotting function given output of linear regression.
     :param x_data: observations
@@ -43,17 +54,33 @@ def plot_regression(x_data, response, beta, plot_type='2d', title=''):
     :return:
     """
 
-    fig = plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=plt.figaspect(0.5))
+    plt.axis('off')
+
+    beta = beta_path[-1]
 
     if plot_type is '2d':
         x_range = (min(x_data), max(x_data))
         x = np.arange(x_range[0], x_range[1], (x_range[1] - x_range[0])//2)
         y = beta[0]*x + beta[1]
 
-        ax = fig.add_subplot(111)
+        ax = fig.add_subplot(121)
         ax.scatter(x_data, response, color='r')
         ax.plot(x, y, linewidth=2, color='k')
         ax.set_title(title)
+
+        xx, yy = np.meshgrid(np.linspace(-5.0, 5.0, 50), np.linspace(-5.0, 5.0, 50))
+        zz = np.array([cost_fn([xx_ij, yy_ij])
+                       for xx_i, yy_i in zip(xx, yy)
+                       for xx_ij, yy_ij in zip(xx_i, yy_i)]).reshape(xx.shape)
+        beta_xy = np.array(beta_path)
+
+        ax2 = fig.add_subplot(122, projection='3d')
+        ax2.plot_surface(xx, yy, zz,
+                        cmap=cm.jet)
+        ax2.plot(beta_xy[:, 0], beta_xy[:, 1], [cost_fn(entry) for entry in beta_path],
+                 'kX-', markersize=10, linewidth=3)
+        ax2.view_init(27, -80)
 
     elif plot_type is '3d':
         xrange = (min(x_data[:, 0]), max(x_data[:, 0]))
@@ -74,56 +101,63 @@ def plot_regression(x_data, response, beta, plot_type='2d', title=''):
     plt.show()
 
 
-def cost_Function(A, b, x):
-    return 1 / float(len(b)) * np.linalg.norm(np.dot(A, x) - b) ** 2
+def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, method='GD', plot=False):
 
-
-def step_Gradient(A, b, x, learning_Rate):
-    N = float(len(b))
-    x_Gradient = 2 / N * np.dot(np.transpose(A), (np.dot(A, x) - b))
-    new_x = x - learning_Rate * x_Gradient
-    return new_x
-
-
-def gradient_Descent_Runner(A, b, starting_x, learning_Rate, num_Iterations):
-    x = starting_x
-    for i in range(num_Iterations):
-        x = step_Gradient(A, b, x, learning_Rate)
-    return x
-
-
-def linear_f(x, t):
-    return x[0] * t + x[1]
-
-
-def run(learning_rate=0.001, num_iterations=5):
-
+    # generate data
     data, response = generate_data(
         lambda x: 2.0 * sum(xi for xi in x) + 1.0,
-        n=2,
-        n_obs=100
+        n=1,
+        n_obs=n_obs
     )
-    beta = np.zeros(3)
-    print(beta)
+    beta_inp = np.zeros(2)
 
-    x_range = (min(data[:, 0]), max(data[:, 0]))
-    t = np.linspace(x_range[0], x_range[1], (x_range[1] - x_range[0])//2)
+    # define symbolic variables & functions
+    print('...Building linear least squares model')
+    X = T.matrix('X')
+    Y = T.vector('Y')
+    beta = T.vector('beta')
+    cost = (1/n_obs) * T.nlinalg.norm(Y - T.dot(X, beta), ord=2)**2
+    cost_grad = T.grad(cost=cost, wrt=[beta])
+    cost_fn = theano.function(inputs=[beta],
+                              outputs=cost,
+                              givens={
+                                  X: data,
+                                  Y: response
+                              })
+    cost_grad_fn = theano.function(inputs=[X, Y, beta],
+                                   outputs=cost_grad)
 
-    plot_regression(data[:, 0:2], response, beta, plot_type='3d', title='Gradient descent iteration 0')
-
-    print('Starting gradient descent at error = %f' % cost_Function(data, response, beta))
-    print('Running...')
-
+    print('Starting gradient descent: \t error = %f \t initial beta = %s' % (cost_fn(beta_inp), str(beta_inp)))
+    beta_path = []
     for i in range(num_iterations):
-        beta = gradient_Descent_Runner(data, response, beta, learning_rate, num_iterations)
-        plot_regression(data[:, 0:2], response, beta, plot_type='3d', title=('Gradient descent iteration %i' % (i+1)))
+        beta_path.append(deepcopy(beta_inp))
+
+        if plot:
+            plot_regression(data[:, 0:1],
+                            response,
+                            beta_path,
+                            cost_fn,
+                            plot_type='2d',
+                            title=('Gradient descent iteration %i' % i))
+
+        if str.upper(method) == 'GD':
+            print('...Running method Gradient Descent')
+            beta_inp = gradient_descent(beta_inp, lambda x: cost_grad_fn(data, response, x)[0], learning_rate, num_iterations)
+        elif str.upper(method) == 'SGD':
+            print('...Running method Stochastic Gradient Descent')
+            beta_inp = stochastic_gradient_descent(data, response, beta_inp, cost_grad_fn, learning_rate, epochs=10, batch_size=n_obs)
+        else:
+            print('ERROR:\t method not implemented')
+            return
 
     print("After %i iterations: \t beta = %s, \t error = %f"
-          % (num_iterations, str(beta), cost_Function(data, response, beta)))
+          % (num_iterations, str(beta_inp), cost_fn(beta_inp)))
 
 
 #################################
 # MAIN SCRIPT
 #################################
 
-run(learning_rate=0.001, num_iterations=5)
+if __name__ == "__main__":
+
+    run_linear_regression(n_obs=100, learning_rate=0.002, num_iterations=5, method='SGD', plot=True)
