@@ -10,6 +10,10 @@ TODO (roughly in order):
   - QR
   - gradient descent
   - stochastic gradient descent
+- nonlinear least squares
+  - test gradient descent with nonlinear least squares problems
+  - QR and/or SVD
+  - Levenberg–Marquardt algorithm
 - implement radial basis function neural network
   - classification/regression problem
   - train network via unsuperivised->supervised methods
