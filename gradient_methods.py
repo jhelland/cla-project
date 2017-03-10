@@ -1,3 +1,7 @@
+"""
+Note: gradient_descent() is redundant with stochastic_gradient_descent(). 
+      Just use SGD with batch size 1.
+"""
 
 import numpy as np
 
