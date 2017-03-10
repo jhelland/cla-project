@@ -13,24 +13,35 @@ def step_Gradient(A, b, x, learning_Rate):
 
 def gradient_Descent_Runner(A, b, starting_x, learning_Rate, num_Iterations):
 	x = starting_x
+	j = 0
 	for i in range(num_Iterations):
 		x = step_Gradient(A, b, x, learning_Rate)
+		
 	return x
 
 def linear_f(x,t):
-	return x[0]*t+x[1]
+	return x[0]*t+x[1]*t
 
 def run():
+	#set parameters (hyperparameters?)
+	num_Iterations = 100
 	learning_Rate= .0001
+	N = 2 # number of dimentions on the inputs
+
+	#creation of input data
 	A = np.linspace(0,10,100) + np.random.normal(0,1,100)
-	ones = np.ones(100)	
-	A =  np.column_stack((A,ones))	
-	b = 2*A[:,0] + 1 + np.random.normal(0,1,100)	
-	x = np.zeros(2)
-	print(x)
-	num_Iterations = 100000
-	t = np.linspace(-2,12,100000)
+	for i in range(N-1):
+		A =  np.column_stack((A,np.linspace(0,10,100) + np.random.normal(0,1,100)))
+
+	#creation of output data
+	true_x = np.linspace(0,100,N)
+	b = np.dot(A,true_x) + np.random.normal(0,1,100)	
+	x = np.zeros(N)
 	
+	
+	
+	##for testing with one/two dimentional cases
+	t = np.linspace(-2,12,100000)	
 	plt.figure(1)
 	plt.subplot(211)
 	plt.plot(A[:,0],b,'ro', t,linear_f(x,t),'k')
@@ -46,7 +57,7 @@ def run():
 	plt.title('After Gradient Descent')
 	
 
-	print("After {0} iterations, x_1 = {1}, x_2 ={2}, error = {3}".format(num_Iterations,x[0],x[1], cost_Function(A,b,x)))
+	print("After {0} iterations, error = {1}".format(num_Iterations, cost_Function(A,b,x)))
 
 	plt.show()
 
