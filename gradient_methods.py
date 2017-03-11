@@ -1,7 +1,3 @@
-"""
-Note: gradient_descent() is redundant with stochastic_gradient_descent(). 
-      Just use SGD with batch size 1.
-"""
 
 import numpy as np
 
@@ -22,7 +18,7 @@ def gradient_descent(starting_x, grad_fn, learning_rate, epochs):
     return x
 
 
-def stochastic_gradient_descent(observations, responses, starting_x, grad_fn, learning_rate, epochs, batch_size=1):
+def stochastic_gradient_descent(observations, responses, theta_init, grad_fn, learning_rate, epochs, batch_size=1):
     """
     Stochastic gradient descent (SGD) algorithm with batch implementation (BSGD).
     :param observations:
@@ -35,18 +31,25 @@ def stochastic_gradient_descent(observations, responses, starting_x, grad_fn, le
     :return: parameter values after epochs of SGD
     """
 
-    m, n = observations.shape
-    x = starting_x
+    if len(observations.shape) > 1:
+        m, n = observations.shape
+    else:
+        m, n = observations.shape[0], 1
+        observations = observations.reshape(m, n)
+    x = theta_init
     data_temp = np.concatenate([observations, responses.reshape(m, 1)], axis=1)
     for e in range(epochs):
-        print('...Epoch %i/%i' % (e, epochs))
 
         np.random.shuffle(data_temp)
         batches = np.split(data_temp, batch_size)
         for batch in batches:
-            x -= learning_rate * grad_fn(
-                batch[:, 0:n].reshape(m // batch_size, n),
+            temp = [learning_rate * entry for entry in grad_fn(
+                batch[:, 0:n].reshape((m // batch_size, n) if n > 1 else (m // batch_size)),
                 batch[:, -1].reshape(m // batch_size, ),
                 x
-            )[0]
+            )]
+            if len(temp) == 1:
+                x -= temp[0]
+            else:
+                x = [a - b for a, b in zip(x, temp)]
     return x

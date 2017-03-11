@@ -160,4 +160,4 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
 
 if __name__ == "__main__":
 
-    run_linear_regression(n_obs=100, learning_rate=0.002, num_iterations=5, method='SGD', plot=True)
+    run_linear_regression(n_obs=10, learning_rate=0.002, num_iterations=5, method='SGD', plot=True)
