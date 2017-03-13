@@ -25,6 +25,7 @@ from copy import deepcopy
 # FUNCTIONS
 #################################
 
+
 def generate_data(response_fn, n=1, n_obs=100):
     """
     Generate data according to a function with Gaussian noise in n dimensions.
@@ -104,9 +105,10 @@ def plot_regression(x_data, response, beta_path, cost_fn, plot_type='2d', title=
 def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, method='GD', plot=False):
 
     # generate data
+    n = 1
     data, response = generate_data(
         lambda x: 2.0 * sum(xi for xi in x) + 1.0,
-        n=1,
+        n=n,
         n_obs=n_obs
     )
     beta_inp = np.zeros(2)
@@ -117,7 +119,7 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
     Y = T.vector('Y')
     beta = T.vector('beta')
     cost = (1/n_obs) * T.nlinalg.norm(Y - T.dot(X, beta), ord=2)**2
-    cost_grad = T.grad(cost=cost, wrt=[beta])
+    cost_grad = T.grad(cost=cost, wrt=beta)
     cost_fn = theano.function(inputs=[beta],
                               outputs=cost,
                               givens={
@@ -127,8 +129,14 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
     cost_grad_fn = theano.function(inputs=[X, Y, beta],
                                    outputs=cost_grad)
 
-    print('Starting gradient descent: \t error = %f \t initial beta = %s' % (cost_fn(beta_inp), str(beta_inp)))
+    print('Starting optimization: \t error = %f \t initial beta = %s' % (cost_fn(beta_inp), str(beta_inp)))
+    method_names = {'GD': 'Gradient Descent',
+                    'SGD': 'Stochastic Gradient Descent',
+                    'GN': 'Gauss-Newton',
+                    'LM': 'Levenberg-Marquardt'}
+    print('\t...Running method with %s' % method_names[str.upper(method)])
     beta_path = []
+    lambda_i = 0.1
     for i in range(num_iterations):
         beta_path.append(deepcopy(beta_inp))
 
@@ -137,15 +145,33 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
                             response,
                             beta_path,
                             cost_fn,
-                            plot_type='2d',
+                            plot_type=('2d' if n == 1 else '3d'),
                             title=('Gradient descent iteration %i' % i))
 
         if str.upper(method) == 'GD':
-            print('...Running method Gradient Descent')
-            beta_inp = gradient_descent(beta_inp, lambda x: cost_grad_fn(data, response, x)[0], learning_rate, num_iterations)
+            beta_inp = gradient_descent(beta_inp,
+                                        lambda x: cost_grad_fn(data, response, x)[0],
+                                        learning_rate,
+                                        1)
         elif str.upper(method) == 'SGD':
-            print('...Running method Stochastic Gradient Descent')
-            beta_inp = stochastic_gradient_descent(data, response, beta_inp, cost_grad_fn, learning_rate, epochs=10, batch_size=n_obs)
+            beta_inp = stochastic_gradient_descent(data,
+                                                   response,
+                                                   beta_inp,
+                                                   cost_grad_fn,
+                                                   learning_rate,
+                                                   epochs=1,
+                                                   batch_size=n_obs)
+        elif str.upper(method) == 'GN':
+            beta_inp = gauss_newton(jacobian=lambda x: cost_grad_fn(data, response, x.flatten()).reshape(2, 1),
+                                    residuals=lambda x: cost_fn(x.flatten()),
+                                    theta_init=beta_inp.reshape(1, 2),
+                                    max_iterations=1).flatten()
+        elif str.upper(method) == 'LM':
+            beta_inp, lambda_i = levenberg_marquardt(jacobian=lambda x: cost_grad_fn(data, response, x).reshape(2, 1),
+                                                     residuals=lambda x: cost_fn(x.flatten()),
+                                                     theta_init=beta_inp,
+                                                     lambda_init=lambda_i,
+                                                     max_iterations=1).flatten()
         else:
             print('ERROR:\t method not implemented')
             return
@@ -160,4 +186,8 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
 
 if __name__ == "__main__":
 
-    run_linear_regression(n_obs=10, learning_rate=0.002, num_iterations=5, method='SGD', plot=True)
+    run_linear_regression(n_obs=10,
+                          learning_rate=0.01,
+                          num_iterations=10,
+                          method='GD',
+                          plot=True)
