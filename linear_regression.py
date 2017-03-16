@@ -136,7 +136,7 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
                     'LM': 'Levenberg-Marquardt'}
     print('\t...Running method with %s' % method_names[str.upper(method)])
     beta_path = []
-    lambda_i = 0.1
+    lambda_i = [0.1]
     for i in range(num_iterations):
         beta_path.append(deepcopy(beta_inp))
 
@@ -167,10 +167,25 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
                                     theta_init=beta_inp.reshape(1, 2),
                                     max_iterations=1).flatten()
         elif str.upper(method) == 'LM':
-            beta_inp, lambda_i = levenberg_marquardt(jacobian=lambda x: cost_grad_fn(data, response, x).reshape(2, 1),
-                                                     residuals=lambda x: cost_fn(x.flatten()),
+            resid = Y - T.dot(X, beta)
+            resid_fn = theano.function(inputs=[beta],
+                                       outputs=resid,
+                                       givens={
+                                           Y: response,
+                                           X: data
+                                       })
+            jac = theano.gradient.jacobian(resid.flatten(), wrt=beta)
+            jac_fn = theano.function(inputs=[beta],
+                                     outputs=jac,
+                                     givens={
+                                         X: data,
+                                         Y: response
+                                     })
+            beta_inp, lambda_i = levenberg_marquardt(jacobian=jac_fn,
+                                                     residuals=resid_fn,
+                                                     cost=lambda x: cost_fn(x.flatten()),
                                                      theta_init=beta_inp,
-                                                     lambda_init=lambda_i,
+                                                     tau=lambda_i[-1],
                                                      max_iterations=1).flatten()
         else:
             print('ERROR:\t method not implemented')
@@ -189,5 +204,5 @@ if __name__ == "__main__":
     run_linear_regression(n_obs=10,
                           learning_rate=0.01,
                           num_iterations=10,
-                          method='GD',
+                          method='LM',
                           plot=True)

@@ -1,5 +1,6 @@
 
 import numpy as np
+import theano
 from utils import *
 
 
@@ -64,63 +65,75 @@ def stochastic_gradient_descent(observations,
     return theta
 
 
-def gauss_newton_damped(jacobian,
-                        residuals,
-                        theta_init,
-                        max_iterations,
-                        tol=1e-10,
-                        lambda_init=0.1,
-                        format_rule=lambda arg: arg):
+def gauss_newton(jacobian,
+                 residuals,
+                 theta_init,
+                 max_iterations,
+                 tol=1e-6,
+                 format_rule=lambda arg: arg):
 
     theta = theta_init
     i = 0
-    dx = np.ones(len(theta_init))
-    while (i < max_iterations) and (dx[dx > tol].size > 0):
+    while (i < max_iterations):
+        i += 1
+
         J = jacobian(theta)
-        dx = np.linalg.solve(np.dot(J.T, J),
-                             -lambda_init * np.dot(J.T, residuals(theta)))
-        theta = vec(theta, axis=1) + dx
+        H = J.T @ J
+        resid = residuals(theta)
+        update = np.linalg.solve(H, -J.T @ resid)
+        theta = vec(theta, axis=1) + update
 
         if format_rule is not None:
             theta = format_rule(theta)
-
-        i += 1
 
     return theta
 
 
 def levenberg_marquardt(jacobian,
                         residuals,
+                        cost,
                         theta_init,
                         max_iterations,
-                        lambda_init=0.1,
+                        tau=0.1,
                         adjustment_factor=10.0,
-                        tol=1e-10,
+                        tol=1e-6,
                         format_rule=None,
                         W_init=None):
 
     theta = theta_init
+    I = np.identity(vec(theta).size)
+    _tau = np.zeros(max_iterations + 1)
+    _tau[0] = tau
     i = 0
-    dx = np.ones(len(jacobian(theta)))
-    while (i < max_iterations) and (dx[dx > tol].size > 0):
-        resid = residuals(theta)
-        J = jacobian(theta)
-        H = np.dot(J.T, J)
-        dx = np.linalg.solve(
-            H + lambda_init * np.diag(H),
-            np.dot(J.T, resid)
-        )
-
-        diff = ([a - b for a, b in zip(theta, format_rule(dx))] if isinstance(theta, list)
-                else theta - dx)
-        if resid <= residuals(diff):
-            lambda_init *= adjustment_factor
-        else:
-            theta = vec(theta, axis=1) - dx
-
-            if format_rule is not None:
-                theta = format_rule(theta)
-
+    while (i < max_iterations):# and (dx[dx > tol].size > 0):
         i += 1
 
-    return theta, lambda_init
+        resid = residuals(theta)
+        J = jacobian(theta)
+        H = J.T @ J
+        g = J.T @ resid
+        try:
+            update = np.linalg.solve(
+                H + tau * I,
+                g
+            )
+        except np.linalg.LinAlgError:
+            print('ERROR: singular matrix')
+            tau = 1.0
+            continue
+            #return theta, _tau
+
+        theta_new = ([a - b for a, b in zip(theta, format_rule(update))] if isinstance(theta, list)
+                     else theta - update)
+
+        if cost(theta) < cost(theta_new):
+            tau *= adjustment_factor
+            adjustment_factor *= 2
+        else:
+            theta = theta_new
+            tau *= 1/3
+            adjustment_factor = 2.0
+
+        _tau[i] = tau
+
+    return theta, _tau
