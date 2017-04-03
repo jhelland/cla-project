@@ -193,6 +193,14 @@ def run2(n_obs=5, method='GD', n_iterations=1, image_rate=1, **kwargs):
                                                              lambda_init=lambda_i,
                                                              tol=tol,
                                                              format_rule=format_rule)
+        if method == 'BFGS' or method == 'ALL':
+            def grad_fn(arg):
+                return cost_grad_fn(observations.reshape(2, n_obs**2), response, *arg)
+
+            theta_dict['BFGS'], _ = bfgs(fn=lambda arg: cost_fn(*arg),
+                                         grad_fn=grad_fn,
+                                         theta=theta_dict['BFGS'],
+                                         max_iterations=epochs)
         """
         if i % image_rate == 0:
 
@@ -274,7 +282,6 @@ def run2(n_obs=5, method='GD', n_iterations=1, image_rate=1, **kwargs):
     plt.show()
 
 
-
 def run(n_obs=100, n_iterations=5, image_rate=1, method='SGD', **kwargs):
 
     kwargs_keys = list(kwargs.keys())
@@ -327,7 +334,7 @@ def run(n_obs=100, n_iterations=5, image_rate=1, method='SGD', **kwargs):
         'GD': theta_init,
         'SGD': theta_init,
         'GN': theta_init,
-        'LM': theta_init
+        'LM': theta_init,
     }
 
     model = T.dot(W2, T.tanh(T.dot(W1, X) + b1)) + b2
@@ -391,6 +398,7 @@ def run(n_obs=100, n_iterations=5, image_rate=1, method='SGD', **kwargs):
     fout_name_template = r'./gif_figures/iteration{}.png'
     fig = []
     taus = [0]
+    x = np.linspace(-5, 5, 1000).astype(theano.config.floatX)
     for i in range(n_iterations):
 
         if method == 'GD' or method == 'ALL':
@@ -413,6 +421,7 @@ def run(n_obs=100, n_iterations=5, image_rate=1, method='SGD', **kwargs):
                 epochs=epochs,
                 batch_size=batch_size
             )
+        """
         if method == 'GN' or method == 'ALL':
             theta_dict['GN'] = gauss_newton(
                 jacobian=lambda arg: jac(jac_r_fn, arg),
@@ -422,6 +431,7 @@ def run(n_obs=100, n_iterations=5, image_rate=1, method='SGD', **kwargs):
                 tol=tol,
                 format_rule=format_rule
             )
+        """
         if method == 'LM' or method == 'ALL':
             theta_dict['LM'], taus = levenberg_marquardt(
                 jacobian=lambda arg: jac(jac_r_fn, arg),
@@ -434,12 +444,21 @@ def run(n_obs=100, n_iterations=5, image_rate=1, method='SGD', **kwargs):
                 tol=1e-6,
                 format_rule=format_rule
             )
+        if method == 'BFGS' or method == 'ALL':
+            theta_inp = theta_dict['BFGS'] if 'BFGS' in theta_dict.keys() else theta_init
+            theta_dict['BFGS'], alphas, hessians = bfgs(
+                fn=lambda arg: cost_fn(*arg),
+                grad_fn=lambda arg: cost_grad_fn(observations, response, *arg),
+                theta=theta_inp,
+                max_iterations=epochs,
+                format_rule=format_rule
+            )
 
-        """
+    """
         if i % image_rate == 0:
             outputs = [(model_fn(x.reshape(1, x.shape[0]), *theta_dict[key]).flatten(),
                         method_names[key])
-                       for key in ('GD', 'SGD', 'GN', 'LM')]
+                       for key in ('GD', 'SGD', 'LM', 'BFGS')]
 
             fig = plt.figure(figsize=(10, 10))
             plt.axis('off')
@@ -492,9 +511,9 @@ def run(n_obs=100, n_iterations=5, image_rate=1, method='SGD', **kwargs):
              duration=0.1)
 
     """
-    n_eval = 100
+    n_eval = 10000
     x = np.linspace(-5, 5, n_eval).astype(theano.config.floatX)
-    f = model_fn(x.reshape(1, 100), *theta_dict[method]).flatten()
+    f = model_fn(x.reshape(1, n_eval), *theta_dict[method]).flatten()
 
     fig = plt.figure(figsize=plt.figaspect(1/3))
     plt.axis('off')
@@ -516,9 +535,17 @@ def run(n_obs=100, n_iterations=5, image_rate=1, method='SGD', **kwargs):
         ax.set_ylabel(r'$\tau_i$')
         ax.set_xlabel(r'$i$')
         ax.set_title('Update Parameter For Levenberg-Marquardt')
+    elif method == 'BFGS':
+        ax = fig.add_subplot(133)
+        ax.semilogy(np.arange(0, len(alphas)), alphas,
+                    '.', markersize=5.0, color='black')
+        ax.set_ylabel(r'$\alpha_i$')
+        ax.set_xlabel(r'$i$')
+        ax.set_title(r'Update rate $\alpha$ for BFGS')
 
     plt.show()
-    #plt.close()
+    plt.close()
+
 
 
 #################################
@@ -530,9 +557,9 @@ if __name__ == '__main__':
     run(n_iterations=1,
         n_obs=20,
         image_rate=20,
-        method='GD',
+        method='BFGS',
         batch_size=20,
-        epochs=500,
+        epochs=1000,
         learning_rate=0.01)
 
     """

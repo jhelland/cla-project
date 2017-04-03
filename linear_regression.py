@@ -133,7 +133,8 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
     method_names = {'GD': 'Gradient Descent',
                     'SGD': 'Stochastic Gradient Descent',
                     'GN': 'Gauss-Newton',
-                    'LM': 'Levenberg-Marquardt'}
+                    'LM': 'Levenberg-Marquardt',
+                    'BFGS': 'Broyden-Fletcher-Goldfarb-Shanno'}
     print('\t...Running method with %s' % method_names[str.upper(method)])
     beta_path = []
     lambda_i = [0.1]
@@ -187,6 +188,11 @@ def run_linear_regression(n_obs=100, learning_rate=0.001, num_iterations=5, meth
                                                      theta_init=beta_inp,
                                                      tau=lambda_i[-1],
                                                      max_iterations=1).flatten()
+        elif str.upper(method) == 'BFGS':
+            beta_inp, _ = bfgs(fn=lambda x: cost_fn(x.flatten()),
+                               grad_fn=lambda x: cost_grad_fn(data, response, x.flatten()),
+                               theta=beta_inp,
+                               max_iterations=5)
         else:
             print('ERROR:\t method not implemented')
             return
@@ -203,6 +209,6 @@ if __name__ == "__main__":
 
     run_linear_regression(n_obs=10,
                           learning_rate=0.01,
-                          num_iterations=10,
-                          method='LM',
+                          num_iterations=5,
+                          method='BFGS',
                           plot=True)

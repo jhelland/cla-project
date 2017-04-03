@@ -137,3 +137,93 @@ def levenberg_marquardt(jacobian,
         _tau[i] = tau
 
     return theta, _tau
+
+
+def weak_wolfe_line_search(phi_fn, phi_grad_fn, c1=1e-4, c2=0.9):
+    """
+    Weak Wolfe conditions (note that 0 < c_1 < c_2 < 1):
+        i) (Armijo condition) \phi(\alpha_j) \leq \phi(0) + \alpha_j*c_1*\phi'(0)
+        ii) (Weak Wolfe condition) \phi'(\alpha_j) \geq c_2*\phi'(0)
+    :param phi_fn: \phi(\alpha) = f(x^{(j)} + \alpha*p^{(j)}), \alpha \geq 0
+    :param phi_grad_fn: \phi'(\alpha) = f'(.)*p^{(j)}
+    :param c1: 
+    :param c2: 
+    :return: 
+    """
+
+    alpha = 1
+    mu = 0
+    v = np.Inf
+
+    while True:
+        if phi_fn(alpha) > phi_fn(0) + alpha*c1*phi_grad_fn(0):  # Armijo fails
+            v = alpha
+        elif phi_grad_fn(alpha) < c2*phi_grad_fn(0):  # Weak Wolfe fails
+            mu = alpha
+        else:  # both conditions hold so stop
+            break
+
+        if v < np.Inf:
+            alpha = (mu + v)/2.
+        else:
+            alpha = 2.*alpha
+
+    return alpha
+
+
+def bfgs(fn,
+         grad_fn,
+         theta,
+         B=None,
+         max_iterations=1,
+         tol=1e-6,
+         format_rule=lambda arg: arg):
+
+    import numpy.linalg as LA
+
+    n_params = sum([p.size for p in theta])
+    if B is None:
+        B = np.identity(n_params)
+
+    # obtain a search direction p
+    # note: this is slow, we can do better by directly updating
+    # B_k^{-1} each iteration
+
+    alphas = []
+    hessians = [B]
+    norm = np.Inf
+    i = 0
+    while (norm > tol) and (i < max_iterations):
+        B = hessians[-1]
+        grad = vec(grad_fn(theta))
+        p = LA.solve(B, -grad)
+
+        v_theta = vec(theta)
+        phi_fn = lambda a: fn(format_rule(v_theta + a*p))
+        phi_grad_fn = lambda a: np.inner(
+            p,
+            vec(grad_fn(format_rule(v_theta + a*p)))
+        )
+
+        # perform line search along p_k to find a step size \alpha_k
+        alphas.append(weak_wolfe_line_search(
+            phi_fn=phi_fn,
+            phi_grad_fn=phi_grad_fn
+        ))
+
+        # update x_{k+1}
+        s = alphas[i] * p
+        theta_new = format_rule(v_theta + s)
+        y = vec(grad_fn(theta_new)) - grad
+        theta = theta_new
+
+        # udpate the approximate Hessian
+        hessians.append(
+            B + (np.outer(y, y)/np.dot(y, s)
+                 - (B @ np.outer(s, s) @ B)/np.inner(s, B @ s))
+        )
+
+        norm = LA.norm(grad, ord=2)
+        i += 1
+
+    return theta, alphas, B
