@@ -45,8 +45,8 @@ def generate_data(response_fn, n=1, n_obs=100):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.hidden = nn.Linear(1, 10)
-        self.output = nn.Linear(10, 1)
+        self.hidden = nn.Linear(1, 3)
+        self.output = nn.Linear(3, 1)
 
     def forward(self, x):
         """
@@ -61,21 +61,28 @@ class Net(nn.Module):
 
 if __name__ == '__main__':
 
+    seaborn.set_style('white')
+    cuda = True
+
     n_obs = 20
     observations, response = generate_data(response_fn1, n=1, n_obs=n_obs)
     observations = observations[:, 0].reshape(observations.shape[0], 1)
 
     model = Net()
     model.train()
+    if cuda:
+        model.cuda()
 
     # optimizer = SGD(model.parameters(), lr=0.005, momentum=0.5, dampening=0)
-    optimizer = BFGS(model.parameters(), grad_tol=1e-5)
+    optimizer = BFGS(model.parameters(), grad_tol=1e-4, solver='cg', cuda=cuda)
 
     model.train()  # puts the model in training mode
-    learning_rate = 0.005
     for i in range(100):
         data = Variable(torch.Tensor(observations))
         target = Variable(torch.Tensor(response))
+        if cuda:
+            data = data.cuda()
+            target = target.cuda()
 
         optimizer.zero_grad()
         output = model(data)
@@ -91,12 +98,14 @@ if __name__ == '__main__':
 
             x = np.linspace(-5, 5, 1000).reshape(1000, 1)
             x = Variable(torch.Tensor(x))
+            if cuda:
+                x = x.cuda()
             y = model(x)
 
             fig = plt.figure(figsize=(8, 8))
             ax = fig.add_subplot(111)
-            ax.scatter(data.data.numpy(), target.data.numpy())
-            ax.plot(x.data.numpy(), y.data.numpy(), 'k-')
+            ax.scatter(data.cpu().data.numpy(), target.cpu().data.numpy())
+            ax.plot(x.cpu().data.numpy(), y.cpu().data.numpy(), 'k-')
             plt.show()
             plt.close()
 
